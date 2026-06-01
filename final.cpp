@@ -4,7 +4,6 @@
 #include <sstream>
 #include <Windows.h>
 #include <WinInet.h>
-#include <locale>
 
 //built in windows internet library (lets us do web requests)
 #pragma comment(lib, "wininet.lib")
