@@ -31,7 +31,6 @@ string cleanString(const string& str) {
     return cleaned;
 }
 
-//connects to pokeapi to get descriptions
 string fetchItemDescription(const string& itemName) {
     string resultBody = "";
     
@@ -72,27 +71,37 @@ string fetchItemDescription(const string& itemName) {
     InternetCloseHandle(hInternet);
 
     if (!resultBody.empty() && resultBody.find("Not Found") == string::npos) {
+        try {
+            json data = json::parse(resultBody);
 
-    json data = json::parse(resultBody);
+            //type checking and string conversion to ensure english results
+            if (data.contains("effect_entries")) {
+                for (const auto& entry : data["effect_entries"]) {
+                    if (entry.is_object() && 
+                        entry.contains("language") &&
+                        entry["language"].is_object() &&
+                        entry["language"].contains("name") &&
+                        entry["language"]["name"].is_string() &&
+                        entry["language"]["name"].get<string>() == "en" &&
+                        entry.contains("short_effect") &&
+                        entry["short_effect"].is_string()) {
 
-    for (const auto& entry : data["effect_entries"]) {
-        if (entry.contains("language") &&
-            entry["language"].contains("name") &&
-            entry["language"]["name"] == "en" &&
-            entry.contains("short_effect")) {
-
-            return entry["short_effect"];
+                        return entry["short_effect"].get<string>();
+                    }
+                }
+            }
+        } catch (const json::exception& e) {
+            return "";
         }
     }
-}
     return ""; 
 }
 
 int main() {
 
-    setlocale(LC_ALL, ".UTF8");
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
+    setvbuf(stdout, nullptr, _IONBF, 0);
     
     //vector that stores collection of structure elements
     vector<PokemonItem> organizerInventory;
