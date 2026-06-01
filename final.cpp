@@ -101,7 +101,7 @@ int main() {
 
         //exit program
         if (choice == 5) {
-            cout << "Exiting program. Goodbye!" << endl;
+            cout << "Exiting program" << endl;
             break;
         }
 
@@ -109,7 +109,7 @@ int main() {
         if (choice == 1) {
             string rawItemName;
             int qty;
-            cout << "Enter item name (e.g., master-ball, potion): ";
+            cout << "Enter item name: ";
             cin >> rawItemName;
             cout << "Enter quantity: ";
             cin >> qty;
@@ -123,7 +123,7 @@ int main() {
             for (size_t i = 0; i < organizerInventory.size(); i++) {
                 if (organizerInventory[i].name == itemName) {
                     organizerInventory[i].quantity += qty; 
-                    cout << "--> Updated existing stack! Total is now: " << organizerInventory[i].quantity << endl;
+                    cout << "New total: " << organizerInventory[i].quantity << endl;
                     alreadyExists = true;
                     break;
                 }
@@ -153,7 +153,7 @@ int main() {
                 //iterates through vector to display items and descriptions
                 for (size_t i = 0; i < organizerInventory.size(); i++) {
                     cout << "[" << i + 1 << "] " << organizerInventory[i].name 
-                         << " | Qty: " << organizerInventory[i].quantity << endl;
+                         << " | Quantity: " << organizerInventory[i].quantity << endl;
                     cout << "    Effect: " << organizerInventory[i].effect << endl;
                 }
             }
@@ -162,7 +162,7 @@ int main() {
         else if (choice == 3) {
             string rawItemName;
             int newQty;
-            cout << "Enter item name to update: ";
+            cout << "Enter item to update: ";
             cin >> rawItemName;
             cout << "Enter new quantity: ";
             cin >> newQty;
@@ -174,12 +174,12 @@ int main() {
             for (size_t i = 0; i < organizerInventory.size(); i++) {
                 if (organizerInventory[i].name == itemName) {
                     organizerInventory[i].quantity = newQty; 
-                    cout << "--> Quantity overwritten successfully!" << endl;
+                    cout << "Quantity overwritten" << endl;
                     updated = true;
                     break;
                 }
             }
-            if (!updated) cout << "--> Item not found in your inventory." << endl;
+            if (!updated) cout << "Item not found in inventory" << endl;
         }
         //option 4----------------------------------------------------------------------------------------------------------
         else if (choice == 4) {
@@ -194,17 +194,16 @@ int main() {
             for (auto it = organizerInventory.begin(); it != organizerInventory.end(); it++) {
                 if (it->name == itemName) {
                     it = organizerInventory.erase(it); 
-                    cout << "--> " << itemName << " completely dropped from vector tracker." << endl;
+                    cout << itemName << " was deleted" << endl;
                     removed = true;
                     break;
                 }
             }
-            if (!removed) cout << "--> Could not find that item to delete." << endl;
+            if (!removed) cout << "Item to delete not found" << endl;
         }
         else {
-            cout << "Invalid entry. Type a number 1 through 5." << endl;
+            cout << "Invalid input; type a number 1-5" << endl;
         }
     }
-
     return 0;
 }
