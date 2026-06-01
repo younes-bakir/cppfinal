@@ -1,133 +1,179 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <fstream>
 #include <sstream>
-#include <cstdlib>
+#include <Windows.h>
+#include <WinInet.h>
+
+//built-in windows internet library (lets us do web requests)
+#pragma comment(lib, "wininet.lib")
 
 using namespace std;
 
-// Structure to organize our local inventory data
+//this structure used by the vector groups an item's data together into a single entry
 struct PokemonItem {
     string name;
     string effect;
     int quantity; 
 };
 
-// Function helper to handle the live PokeAPI curl call
-string fetchItemDescription(const string& itemName) {
-    string tempFilePath = "/tmp/poke_response.txt";
-    
-    // MAC POWER COMMAND: Uses curl to fetch, and lets Mac's native 'grep' extract the short_effect instantly
-    string command = "curl -k -s -L -A 'Mozilla/5.0' \"https://pokeapi.co" + itemName + "\" | grep -o '\"short_effect\":\"[^\"]*\"' > " + tempFilePath;
-    
-    int sysResult = system(command.c_str());
+//removes carriage returns and forces lowercase for clean input
+string cleanString(const string& str) {
+    string cleaned = "";
+    for (char c : str) {
+        if (c != '\r' && c != '\n' && c != ' ') {
+            cleaned += tolower(c); 
+        }
+    }
+    return cleaned;
+}
 
-    ifstream file(tempFilePath);
-    string rawLine;
-    if (file && sysResult == 0) {
-        getline(file, rawLine);
-        file.close();
-        remove(tempFilePath.c_str());
+//connects to pokeapi to get descriptions
+string fetchItemDescription(const string& itemName) {
+    string resultBody = "";
+    
+    //init native windows internet sessions
+    HINTERNET hInternet = InternetOpenA("PokeAgent", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+    if (!hInternet) return "";
+
+    //connect to pokeapi server layout
+    HINTERNET hConnect = InternetConnectA(hInternet, "pokeapi.co", INTERNET_DEFAULT_HTTPS_PORT, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+    if (!hConnect) {
+        InternetCloseHandle(hInternet);
+        return "";
     }
 
-    // If grep found the description match, clean it up
-    // Example rawLine: "short_effect":"Restores 20 HP."
-    if (!rawLine.empty()) {
-        size_t pos = rawLine.find("\":\"");
-        if (pos != string::npos) {
-            string cleanEffect = rawLine.substr(pos + 3); // Cut off everything before the description text
-            if (!cleanEffect.empty() && cleanEffect.back() == '"') {
-                cleanEffect.pop_back(); // Remove the trailing quote
+    //opens request channel
+    string path = "/api/v2/item/" + itemName;
+    HINTERNET hRequest = HttpOpenRequestA(hConnect, "GET", path.c_str(), NULL, NULL, NULL, INTERNET_FLAG_SECURE | INTERNET_FLAG_RELOAD, 0);
+    if (!hRequest) {
+        InternetCloseHandle(hConnect);
+        InternetCloseHandle(hInternet);
+        return "";
+    }
+
+    //send request
+    if (HttpSendRequestA(hRequest, NULL, 0, NULL, 0)) {
+        char buffer[1024];
+        DWORD bytesRead = 0;
+        
+        //continuously read web data
+        while (InternetReadFile(hRequest, &buffer[0], sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) {
+            buffer[bytesRead] = '\0';
+            resultBody += buffer;
+        }
+    }
+
+    InternetCloseHandle(hRequest);
+    InternetCloseHandle(hConnect);
+    InternetCloseHandle(hInternet);
+
+    //if valid, parse description text
+    if (!resultBody.empty() && resultBody.find("Not Found") == string::npos) {
+        size_t targetPos = resultBody.find("\"short_effect\":\"");
+        if (targetPos != string::npos) {
+            size_t start = targetPos + 16;
+            size_t end = resultBody.find("\"", start);
+            if (end != string::npos) {
+                return resultBody.substr(start, end - start);
             }
-            return cleanEffect;
         }
     }
     return ""; 
 }
 
 int main() {
+    //vector that stores collection of structure elements
     vector<PokemonItem> organizerInventory;
     int choice = 0;
 
-    cout << "========================================" << endl;
-    cout << "   LOCAL POKEMON ITEM ORGANIZER MENU   " << endl;
-    cout << "========================================" << endl;
-
     while (true) {
-        cout << "\n1. Add/Stack Item\n2. View Local Inventory\n3. Update Quantity\n4. Remove Item\n5. Exit Program\n";
-        cout << "Enter your choice (1-5): ";
-        cin >> choice;
+        cout << "\n1. Add/Stack Item\n2. View Inventory\n3. Update Quantity\n4. Delete Item\n5. Exit\n";
+        cout << "Enter choice 1-5: ";
+        
+        //catch and fix menu typing errors
+        if (!(cin >> choice)) {
+            cin.clear();
+            cin.ignore(1000, '\n');
+            continue;
+        }
+        cin.ignore(1000, '\n'); //clears leftover newline memory (important because this will mess with other inputs)
 
-        // CRITICAL FIX: Clears the leftover newline memory from typing a number
-        cin.ignore(1000, '\n'); 
-
+        //exit program
         if (choice == 5) {
             cout << "Exiting program. Goodbye!" << endl;
             break;
         }
 
-        // --- OPTION 1: ADD AN ITEM ---
+        //option 1----------------------------------------------------------------------------------------------------------
         if (choice == 1) {
-            string itemName;
+            string rawItemName;
             int qty;
             cout << "Enter item name (e.g., master-ball, potion): ";
-            cin >> itemName;
+            cin >> rawItemName;
             cout << "Enter quantity: ";
             cin >> qty;
-            cin.ignore(1000, '\n'); // Clear stream again after inputs
+            cin.ignore(1000, '\n');
 
+            //pass string through cleaner upper
+            string itemName = cleanString(rawItemName);
+
+            //checks if item already exists locally
             bool alreadyExists = false;
-            for (size_t i = 0; i < organizerInventory.size(); ++i) {
+            for (size_t i = 0; i < organizerInventory.size(); i++) {
                 if (organizerInventory[i].name == itemName) {
-                    organizerInventory[i].quantity += qty;
+                    organizerInventory[i].quantity += qty; 
                     cout << "--> Updated existing stack! Total is now: " << organizerInventory[i].quantity << endl;
                     alreadyExists = true;
                     break;
                 }
             }
 
+            //if the item doesn't exist locally, it's data is fetched from pokeapi
             if (!alreadyExists) {
-                cout << "Connecting to PokeAPI to look up item specs..." << endl;
                 string description = fetchItemDescription(itemName);
 
+                //verifies web database data before saving it
                 if (!description.empty()) {
                     PokemonItem newItem = {itemName, description, qty};
-                    organizerInventory.push_back(newItem);
-                    cout << "--> Successfully added " << itemName << " to your vector inventory!" << endl;
+                    organizerInventory.push_back(newItem); 
+                    cout << itemName << " was added to your inventory" << endl;
                 } else {
-                    cout << "--> Error: Real PokeAPI could not find that item. Check your spelling (use lowercase and hyphens like ultra-ball)." << endl;
+                    cout << "Item not found" << endl;
                 }
             }
         }
-        // --- OPTION 2: VIEW LOCAL INVENTORY ---
+        //option 2----------------------------------------------------------------------------------------------------------
         else if (choice == 2) {
+            //checks if array is empty
             if (organizerInventory.empty()) {
-                cout << "--> Your inventory vector is completely empty." << endl;
+                cout << "Inventory is empty" << endl;
             } else {
-                cout << "\n--- CURRENT INVENTORY CONSOLE REPORT ---" << endl;
-                for (size_t i = 0; i < organizerInventory.size(); ++i) {
+                cout << "\nInventory------------------------" << endl;
+                //iterates through vector to display items and descriptions
+                for (size_t i = 0; i < organizerInventory.size(); i++) {
                     cout << "[" << i + 1 << "] " << organizerInventory[i].name 
                          << " | Qty: " << organizerInventory[i].quantity << endl;
                     cout << "    Effect: " << organizerInventory[i].effect << endl;
                 }
-                cout << "----------------------------------------" << endl;
             }
         }
-        // --- OPTION 3: UPDATE QUANTITY ---
+        //option 3----------------------------------------------------------------------------------------------------------
         else if (choice == 3) {
-            string itemName;
+            string rawItemName;
             int newQty;
             cout << "Enter item name to update: ";
-            cin >> itemName;
-            cout << "Enter exact new quantity: ";
+            cin >> rawItemName;
+            cout << "Enter new quantity: ";
             cin >> newQty;
             cin.ignore(1000, '\n');
 
+            string itemName = cleanString(rawItemName);
             bool updated = false;
-            for (size_t i = 0; i < organizerInventory.size(); ++i) {
+            //loops through structures to find and overwrite the requested quantity
+            for (size_t i = 0; i < organizerInventory.size(); i++) {
                 if (organizerInventory[i].name == itemName) {
-                    organizerInventory[i].quantity = newQty;
+                    organizerInventory[i].quantity = newQty; 
                     cout << "--> Quantity overwritten successfully!" << endl;
                     updated = true;
                     break;
@@ -135,18 +181,20 @@ int main() {
             }
             if (!updated) cout << "--> Item not found in your inventory." << endl;
         }
-        // --- OPTION 4: REMOVE ITEM ---
+        //option 4----------------------------------------------------------------------------------------------------------
         else if (choice == 4) {
-            string itemName;
-            cout << "Enter item name to remove entirely: ";
-            cin >> itemName;
+            string rawItemName;
+            cout << "Enter item to delete: ";
+            cin >> rawItemName;
             cin.ignore(1000, '\n');
 
+            string itemName = cleanString(rawItemName);
             bool removed = false;
-            for (auto it = organizerInventory.begin(); it != organizerInventory.end(); ++it) {
+            //search through vector to delete requested item
+            for (auto it = organizerInventory.begin(); it != organizerInventory.end(); it++) {
                 if (it->name == itemName) {
-                    organizerInventory.erase(it);
-                    cout << "--> " << itemName << " completely dropped from vector." << endl;
+                    it = organizerInventory.erase(it); 
+                    cout << "--> " << itemName << " completely dropped from vector tracker." << endl;
                     removed = true;
                     break;
                 }
