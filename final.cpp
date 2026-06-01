@@ -46,7 +46,7 @@ string fetchItemDescription(const string& itemName) {
     }
 
     //opens request channel
-    string path = "/api/v2/item/" + itemName;
+    string path = "/api/v2/item/" + itemName + "/?language=en";
     HINTERNET hRequest = HttpOpenRequestA(hConnect, "GET", path.c_str(), NULL, NULL, NULL, INTERNET_FLAG_SECURE | INTERNET_FLAG_RELOAD, 0);
     if (!hRequest) {
         InternetCloseHandle(hConnect);
