@@ -4,6 +4,7 @@
 #include <sstream>
 #include <Windows.h>
 #include <WinInet.h>
+#include <locale>
 #include <nlohmann/json.hpp>
 
 //built in windows internet library (lets us do web requests)
@@ -21,11 +22,11 @@ struct PokemonItem {
 
 //removes carriage returns and forces lowercase for clean input
 string cleanString(const string& str) {
-    string cleaned = "";
+    string cleaned;
     for (char c : str) {
-        if (c != '\r' && c != '\n' && c != ' ') {
-            cleaned += tolower(c); 
-        }
+        if (c == ' ') cleaned += '-';
+        else if (c != '\r' && c != '\n')
+            cleaned += tolower(c);
     }
     return cleaned;
 }
@@ -89,6 +90,7 @@ string fetchItemDescription(const string& itemName) {
 
 int main() {
 
+    setlocale(LC_ALL, ".UTF8");
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
     
