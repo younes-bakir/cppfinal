@@ -75,8 +75,11 @@ string fetchItemDescription(const string& itemName) {
     json data = json::parse(resultBody);
 
     for (const auto& entry : data["effect_entries"]) {
+        if (entry.contains("language") &&
+            entry["language"].contains("name") &&
+            entry["language"]["name"] == "en" &&
+            entry.contains("short_effect")) {
 
-        if (entry["language"]["name"] == "en") {
             return entry["short_effect"];
         }
     }
