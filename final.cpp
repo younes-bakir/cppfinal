@@ -4,11 +4,13 @@
 #include <sstream>
 #include <Windows.h>
 #include <WinInet.h>
+#include <nlohmann/json.hpp>
 
-//built-in windows internet library (lets us do web requests)
+//built in windows internet library (lets us do web requests)
 #pragma comment(lib, "wininet.lib")
 
 using namespace std;
+using json = nlohmann::json;
 
 //this structure used by the vector groups an item's data together into a single entry
 struct PokemonItem {
@@ -68,21 +70,25 @@ string fetchItemDescription(const string& itemName) {
     InternetCloseHandle(hConnect);
     InternetCloseHandle(hInternet);
 
-    //if valid, parse description text
     if (!resultBody.empty() && resultBody.find("Not Found") == string::npos) {
-        size_t targetPos = resultBody.find("\"short_effect\":\"");
-        if (targetPos != string::npos) {
-            size_t start = targetPos + 16;
-            size_t end = resultBody.find("\"", start);
-            if (end != string::npos) {
-                return resultBody.substr(start, end - start);
-            }
+
+    json data = json::parse(resultBody);
+
+    for (const auto& entry : data["effect_entries"]) {
+
+        if (entry["language"]["name"] == "en") {
+            return entry["short_effect"];
         }
     }
+}
     return ""; 
 }
 
 int main() {
+
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    
     //vector that stores collection of structure elements
     vector<PokemonItem> organizerInventory;
     int choice = 0;
