@@ -5,13 +5,11 @@
 #include <Windows.h>
 #include <WinInet.h>
 #include <locale>
-#include <nlohmann/json.hpp>
 
 //built in windows internet library (lets us do web requests)
 #pragma comment(lib, "wininet.lib")
 
 using namespace std;
-using json = nlohmann::json;
 
 //this structure used by the vector groups an item's data together into a single entry
 struct PokemonItem {
@@ -101,7 +99,6 @@ int main() {
 
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
-    setvbuf(stdout, nullptr, _IONBF, 0);
     
     //vector that stores collection of structure elements
     vector<PokemonItem> organizerInventory;
