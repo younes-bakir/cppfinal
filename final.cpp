@@ -38,7 +38,7 @@ string fetchItemDescription(const string& itemName) {
     HINTERNET hInternet = InternetOpenA("PokeAgent", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
     if (!hInternet) return "";
 
-    //connect to pokeapi server layout
+    //connect to pokeapi
     HINTERNET hConnect = InternetConnectA(hInternet, "pokeapi.co", INTERNET_DEFAULT_HTTPS_PORT, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
     if (!hConnect) {
         InternetCloseHandle(hInternet);
