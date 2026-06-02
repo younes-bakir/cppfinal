@@ -1,11 +1,9 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <sstream>
 #include <Windows.h>
 #include <WinInet.h>
 
-//built in windows internet library (lets us do web requests)
 #pragma comment(lib, "wininet.lib")
 
 using namespace std;
@@ -13,8 +11,10 @@ using namespace std;
 //this structure used by the vector groups an item's data together into a single entry
 struct PokemonItem {
     string name;
-    string effect;
-    int quantity; 
+    string category;
+    int cost;
+    int flingPower;
+    int quantity;
 };
 
 //removes carriage returns and forces lowercase for clean input
@@ -28,9 +28,42 @@ string cleanString(const string& str) {
     return cleaned;
 }
 
-string fetchItemDescription(const string& itemName) {
+//extracts a flat string value from raw json by searching for "key":"value"
+string extractStringField(const string& body, const string& key) {
+    string search = "\"" + key + "\":\"";
+    size_t pos = body.find(search);
+    if (pos == string::npos) return "";
+    pos += search.size();
+    size_t end = body.find("\"", pos);
+    if (end == string::npos) return "";
+    return body.substr(pos, end - pos);
+}
+
+//extracts a flat integer value from raw json by searching for "key":number
+int extractIntField(const string& body, const string& key) {
+    string search = "\"" + key + "\":";
+    size_t pos = body.find(search);
+    if (pos == string::npos) return -1;
+    pos += search.size();
+    if (body[pos] == 'n') return -1; //handles null
+    size_t end = body.find_first_not_of("0123456789", pos);
+    return stoi(body.substr(pos, end - pos));
+}
+
+//extracts a nested name field by finding the parent key, then the name inside it
+string extractNestedName(const string& body, const string& parentKey) {
+    string search = "\"" + parentKey + "\":{";
+    size_t pos = body.find(search);
+    if (pos == string::npos) return "";
+    size_t blockEnd = body.find("}", pos);
+    if (blockEnd == string::npos) return "";
+    string block = body.substr(pos, blockEnd - pos);
+    return extractStringField(block, "name");
+}
+
+string fetchItemData(const string& itemName, string& outCategory, int& outCost, int& outFlingPower) {
     string resultBody = "";
-    
+
     //init native windows internet sessions
     HINTERNET hInternet = InternetOpenA("PokeAgent", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
     if (!hInternet) return "";
@@ -43,7 +76,7 @@ string fetchItemDescription(const string& itemName) {
     }
 
     //opens request channel
-    string path = "/api/v2/item/" + itemName + "/?language=en";
+    string path = "/api/v2/item/" + itemName + "/";
     HINTERNET hRequest = HttpOpenRequestA(hConnect, "GET", path.c_str(), NULL, NULL, NULL, INTERNET_FLAG_SECURE | INTERNET_FLAG_RELOAD, 0);
     if (!hRequest) {
         InternetCloseHandle(hConnect);
@@ -55,7 +88,7 @@ string fetchItemDescription(const string& itemName) {
     if (HttpSendRequestA(hRequest, NULL, 0, NULL, 0)) {
         char buffer[1024];
         DWORD bytesRead = 0;
-        
+
         //continuously read web data
         while (InternetReadFile(hRequest, &buffer[0], sizeof(buffer) - 1, &bytesRead) && bytesRead > 0) {
             buffer[bytesRead] = '\0';
@@ -67,38 +100,21 @@ string fetchItemDescription(const string& itemName) {
     InternetCloseHandle(hConnect);
     InternetCloseHandle(hInternet);
 
-    if (!resultBody.empty() && resultBody.find("Not Found") == string::npos) {
-        try {
-            json data = json::parse(resultBody);
+    if (resultBody.empty() || resultBody.find("Not Found") != string::npos) return "";
 
-            //type checking and string conversion to ensure english results
-            if (data.contains("effect_entries")) {
-                for (const auto& entry : data["effect_entries"]) {
-                    if (entry.is_object() && 
-                        entry.contains("language") &&
-                        entry["language"].is_object() &&
-                        entry["language"].contains("name") &&
-                        entry["language"]["name"].is_string() &&
-                        entry["language"]["name"].get<string>() == "en" &&
-                        entry.contains("short_effect") &&
-                        entry["short_effect"].is_string()) {
+    //parse each field from the raw response
+    outCost = extractIntField(resultBody, "cost");
+    outFlingPower = extractIntField(resultBody, "fling_power");
+    outCategory = extractNestedName(resultBody, "category");
 
-                        return entry["short_effect"].get<string>();
-                    }
-                }
-            }
-        } catch (const json::exception& e) {
-            return "";
-        }
-    }
-    return ""; 
+    return resultBody;
 }
 
 int main() {
 
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
-    
+
     //vector that stores collection of structure elements
     vector<PokemonItem> organizerInventory;
     int choice = 0;
@@ -106,14 +122,14 @@ int main() {
     while (true) {
         cout << "\n1. Add/Stack Item\n2. View Inventory\n3. Update Quantity\n4. Delete Item\n5. Exit\n";
         cout << "Enter choice 1-5: ";
-        
-        //catch and fix menu typing errors
+
+        //catch and fix typing errors
         if (!(cin >> choice)) {
             cin.clear();
             cin.ignore(1000, '\n');
             continue;
         }
-        cin.ignore(1000, '\n'); //clears leftover newline memory (important because this will mess with other inputs)
+        cin.ignore(1000, '\n'); //clears leftover newline memory (important because this would mess with other inputs)
 
         //exit program
         if (choice == 5) {
@@ -138,7 +154,7 @@ int main() {
             bool alreadyExists = false;
             for (size_t i = 0; i < organizerInventory.size(); i++) {
                 if (organizerInventory[i].name == itemName) {
-                    organizerInventory[i].quantity += qty; 
+                    organizerInventory[i].quantity += qty;
                     cout << "New total: " << organizerInventory[i].quantity << endl;
                     alreadyExists = true;
                     break;
@@ -147,12 +163,20 @@ int main() {
 
             //if the item doesn't exist locally, it's data is fetched from pokeapi
             if (!alreadyExists) {
-                string description = fetchItemDescription(itemName);
+                string category;
+                int cost = -1, flingPower = -1;
+                string result = fetchItemData(itemName, category, cost, flingPower);
 
-                //verifies web database data before saving it
-                if (!description.empty()) {
-                    PokemonItem newItem = {itemName, description, qty};
-                    organizerInventory.push_back(newItem); 
+                //verifies database data before saving item
+                if (!result.empty()) {
+                    PokemonItem newItem = {
+                        itemName,
+                        category.empty() ? "unknown" : category,
+                        cost,
+                        flingPower,
+                        qty
+                    };
+                    organizerInventory.push_back(newItem);
                     cout << itemName << " was added to your inventory" << endl;
                 } else {
                     cout << "Item not found" << endl;
@@ -168,9 +192,12 @@ int main() {
                 cout << "\nInventory------------------------" << endl;
                 //iterates through vector to display items and descriptions
                 for (size_t i = 0; i < organizerInventory.size(); i++) {
-                    cout << "[" << i + 1 << "] " << organizerInventory[i].name 
-                         << " | Quantity: " << organizerInventory[i].quantity << endl;
-                    cout << "    Effect: " << organizerInventory[i].effect << endl;
+                    cout << "[" << i + 1 << "] " << organizerInventory[i].name
+                         << " | Quantity: " << organizerInventory[i].quantity
+                         << " | Category: " << organizerInventory[i].category
+                         << " | Cost (Pokedollars): " << (organizerInventory[i].cost >= 0 ? to_string(organizerInventory[i].cost) : "N/A")
+                         << " | Fling Power: " << (organizerInventory[i].flingPower >= 0 ? to_string(organizerInventory[i].flingPower) : "N/A")
+                         << endl;
                 }
             }
         }
@@ -189,8 +216,8 @@ int main() {
             //loops through structures to find and overwrite the requested quantity
             for (size_t i = 0; i < organizerInventory.size(); i++) {
                 if (organizerInventory[i].name == itemName) {
-                    organizerInventory[i].quantity = newQty; 
-                    cout << "Quantity overwritten" << endl;
+                    organizerInventory[i].quantity = newQty;
+                    cout << "Quantity updated" << endl;
                     updated = true;
                     break;
                 }
@@ -209,7 +236,7 @@ int main() {
             //search through vector to delete requested item
             for (auto it = organizerInventory.begin(); it != organizerInventory.end(); it++) {
                 if (it->name == itemName) {
-                    it = organizerInventory.erase(it); 
+                    it = organizerInventory.erase(it);
                     cout << itemName << " was deleted" << endl;
                     removed = true;
                     break;
